@@ -1,0 +1,5 @@
+Flask
+requests
+playwright
+PyPDF2
+pandas
