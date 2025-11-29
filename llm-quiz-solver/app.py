@@ -7,7 +7,7 @@ from flask import Flask, request, jsonify, render_template
 import random
 import string
 import requests
-from concurrent.futures import ThreadPoolExecutor
+import threading
 from solver import QuizSolver
 
 # Configure logging
@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-executor = ThreadPoolExecutor(max_workers=2)
+# executor = ThreadPoolExecutor(max_workers=2) # Removed to avoid conflicts
 
 # Configuration
 PROVIDERS = {
@@ -95,8 +95,9 @@ def quiz_webhook():
         logger.warning(f"Secret mismatch: received {secret} expected {MY_SECRET[:3] + '***'}")
         return jsonify({"error": "Forbidden"}), 403
 
-    # Submit task to background executor
-    executor.submit(run_solver_background, url, email, secret)
+    # Submit task to background thread
+    thread = threading.Thread(target=run_solver_background, args=(url, email, secret))
+    thread.start()
 
     # Respond immediately as required
     return jsonify({"status": "accepted", "message": "Task received and processing started."}), 200

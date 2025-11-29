@@ -5,3 +5,8 @@ PyPDF2
 pandas
 python-dotenv
 gunicorn
+langchain
+langchain-google-genai
+beautifulsoup4
+markdownify
+pillow
