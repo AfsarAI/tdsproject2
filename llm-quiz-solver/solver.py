@@ -56,7 +56,7 @@ class QuizSolver:
         console.print(f"[bold magenta]Starting Quiz Solver for {email}[/bold magenta]")
         
         while current_url:
-            console.print(f"\n[bold]Visiting:[/bold] [url]{current_url}[/url]")
+            console.print(f"\n[bold green]We send you to url:[/bold green] [url]{current_url}[/url]")
             try:
                 result = self._process_single_quiz_agent(current_url, email)
                 if not result:
@@ -65,15 +65,16 @@ class QuizSolver:
                 
                 # Check if we got a new URL to visit
                 if result.get("correct") and result.get("url"):
-                    current_url = result.get("url")
-                    console.print(f"[success]Correct! Proceeding to next URL:[/success] [url]{current_url}[/url]")
+                    next_url = result.get("url")
+                    console.print(f"[bold green]You solve it correctly. You get url:[/bold green] [url]{next_url}[/url]")
+                    current_url = next_url
                 elif not result.get("correct"):
                     reason = result.get('reason', 'Unknown')
-                    console.print(f"[error]Incorrect answer.[/error] Reason: {reason}")
+                    console.print(f"[error]You solve it wrongly.[/error] Reason: {reason}")
                     # Stop to avoid infinite loops
                     break
                 else:
-                    console.print("[bold green]Quiz completed successfully! No more URLs.[/bold green]")
+                    console.print("[bold green]You solve it correctly and get no new URL, ending the quiz.[/bold green]")
                     break
             except Exception as e:
                 console.print(f"[error]Error processing quiz at {current_url}: {e}[/error]")
@@ -115,6 +116,7 @@ Your specific instructions:
 - **Time Limit**: You must be efficient. Do not loop unnecessarily.
 - **Answer Format**: The answer can be a string, number, or JSON.
 - **Submission**: Do NOT submit via HTTP POST yourself. ALWAYS use the `submit_answer` tool.
+- **Output Noise**: Do NOT print large amounts of data (like whole CSVs or long lists) to stdout. Use `head()` or summary statistics if you need to inspect data.
 
 Context:
 - User Email: {email}
