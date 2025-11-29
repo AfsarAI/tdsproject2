@@ -155,14 +155,14 @@ Context:
                     ("placeholder", "{agent_scratchpad}"),
                 ])
                 
-                # Try Gemini first, then AIPIPE
-                llm = self._get_llm("gemini")
+                # Try AIPIPE first (to avoid Gemini rate limits), then Gemini
+                llm = self._get_llm("aipipe")
                 if not llm:
-                    console.print("[warning]Gemini API Key missing, trying AIPIPE...[/warning]")
-                    llm = self._get_llm("aipipe")
+                    console.print("[warning]AIPIPE API Key missing or failed, trying Gemini...[/warning]")
+                    llm = self._get_llm("gemini")
                 
                 if not llm:
-                    console.print("[error]No valid LLM provider found (Gemini or AIPIPE).[/error]")
+                    console.print("[error]No valid LLM provider found (AIPIPE or Gemini).[/error]")
                     return None
 
                 # Create Agent
