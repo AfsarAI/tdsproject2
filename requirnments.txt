@@ -1,0 +1,7 @@
+Flask
+requests
+playwright
+PyPDF2
+pandas
+python-dotenv
+gunicorn
