@@ -154,7 +154,7 @@ def run_python_code(code: str) -> str:
 class SubmitAnswerSchema(BaseModel):
     answer: Any = Field(description="The final answer to the quiz question.")
 
-@tool(args_schema=SubmitAnswerSchema)
+@tool(args_schema=SubmitAnswerSchema, return_direct=True)
 def submit_answer(answer: Any) -> str:
     """
     Submits the final answer to the quiz. 

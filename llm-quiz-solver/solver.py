@@ -9,8 +9,28 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate
 from llm_tools import ALL_TOOLS, set_page
+from rich.console import Console
+from rich.logging import RichHandler
+from rich.theme import Theme
 
-logger = logging.getLogger(__name__)
+# Configure Rich Console
+custom_theme = Theme({
+    "info": "cyan",
+    "warning": "yellow",
+    "error": "bold red",
+    "success": "bold green",
+    "url": "bold blue underline"
+})
+console = Console(theme=custom_theme)
+
+# Configure logging to use Rich
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s",
+    datefmt="[%X]",
+    handlers=[RichHandler(console=console, rich_tracebacks=True)]
+)
+logger = logging.getLogger("quiz_solver")
 
 class QuizSolver:
     def __init__(self, secret):
@@ -18,14 +38,14 @@ class QuizSolver:
         # Initialize LLM
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
-            logger.error("GEMINI_API_KEY not found in environment variables.")
+            console.print("[error]GEMINI_API_KEY not found in environment variables.[/error]")
             raise ValueError("GEMINI_API_KEY is required.")
             
         self.llm = ChatGoogleGenerativeAI(
             model="gemini-2.0-flash",
             google_api_key=api_key,
             temperature=0,
-            convert_system_message_to_human=True # Sometimes needed for Gemini
+            convert_system_message_to_human=True
         )
         
         self.tools = ALL_TOOLS
@@ -33,27 +53,30 @@ class QuizSolver:
     def solve(self, start_url, email):
         current_url = start_url
         
+        console.print(f"[bold magenta]Starting Quiz Solver for {email}[/bold magenta]")
+        
         while current_url:
-            logger.info(f"Visiting: {current_url}")
+            console.print(f"\n[bold]Visiting:[/bold] [url]{current_url}[/url]")
             try:
                 result = self._process_single_quiz_agent(current_url, email)
                 if not result:
-                    logger.info("Quiz processing finished or failed.")
+                    console.print("[warning]Quiz processing finished or failed (no result returned).[/warning]")
                     break
                 
                 # Check if we got a new URL to visit
                 if result.get("correct") and result.get("url"):
                     current_url = result.get("url")
-                    logger.info(f"Correct! Proceeding to next URL: {current_url}")
+                    console.print(f"[success]Correct! Proceeding to next URL:[/success] [url]{current_url}[/url]")
                 elif not result.get("correct"):
-                    logger.warning(f"Incorrect answer. Reason: {result.get('reason')}")
+                    reason = result.get('reason', 'Unknown')
+                    console.print(f"[error]Incorrect answer.[/error] Reason: {reason}")
                     # Stop to avoid infinite loops
                     break
                 else:
-                    logger.info("Quiz completed successfully!")
+                    console.print("[bold green]Quiz completed successfully! No more URLs.[/bold green]")
                     break
             except Exception as e:
-                logger.error(f"Error processing quiz at {current_url}: {e}")
+                console.print(f"[error]Error processing quiz at {current_url}: {e}[/error]")
                 break
 
     def _process_single_quiz_agent(self, url, email):
@@ -66,6 +89,11 @@ class QuizSolver:
                 
                 # Set page context for tools
                 set_page(page)
+
+                # Try to find submit URL *before* agent runs (in case agent navigates away)
+                content = page.content()
+                text_content = page.inner_text("body")
+                initial_submit_url = self._find_submit_url(page, url, text_content, content)
                 
                 # Define Prompt
                 prompt = ChatPromptTemplate.from_messages([
@@ -75,19 +103,23 @@ You have access to a browser (via tools) to read the page, navigate, and downloa
 You can also run Python code to analyze data.
 
 Your specific instructions:
-1. Read the page content to understand the question.
-2. If there are links to files (PDF, CSV, etc.), download and analyze them.
-3. If you need to scrape another page, use the navigation or download tools.
-4. Calculate the answer.
-5. Call the `submit_answer` tool with the final answer.
+1. **Read the page content** to understand the question.
+2. **Analyze the task**:
+   - If it involves a file (PDF, CSV), download and process it.
+   - If it involves scraping, navigate to the target pages.
+   - If it involves visualization, generate the chart code (but you might not need to render it if the answer is just a number/string).
+3. **Calculate the answer**.
+4. **Call the `submit_answer` tool** with the final answer.
+
+**CRITICAL RULES**:
+- **Time Limit**: You must be efficient. Do not loop unnecessarily.
+- **Answer Format**: The answer can be a string, number, or JSON.
+- **Submission**: Do NOT submit via HTTP POST yourself. ALWAYS use the `submit_answer` tool.
 
 Context:
 - User Email: {email}
 - Quiz Secret: {self.secret}
 - Current Quiz URL: {url}
-
-Do NOT submit the answer via HTTP POST yourself. Just call `submit_answer` with the value.
-If you cannot solve it, try your best to guess or return a reasonable failure message.
 """),
                     ("placeholder", "{chat_history}"),
                     ("human", "{input}"),
@@ -99,54 +131,38 @@ If you cannot solve it, try your best to guess or return a reasonable failure me
                 agent_executor = AgentExecutor(agent=agent, tools=self.tools, verbose=True, handle_parsing_errors=True)
                 
                 # Run Agent
-                logger.info("Starting Agent execution...")
+                console.print("[info]Agent is thinking...[/info]")
                 response = agent_executor.invoke({"input": "Solve the quiz on the current page."})
                 output = response["output"]
                 
-                # Extract answer from output or tool calls
-                # The agent might have called submit_answer, which returns "FINAL_ANSWER:..."
-                # Or the output itself might contain it if we parse the intermediate steps (which AgentExecutor does but hides by default unless we check intermediate_steps)
-                # But since we defined submit_answer as a tool, the agent *should* have called it.
-                # However, AgentExecutor returns the string response of the agent.
-                
-                # Let's look for the answer in the tool execution logs or force the agent to return it.
-                # A better way with AgentExecutor is to parse the 'output' if the agent just says it, 
-                # but we want the specific value passed to submit_answer.
-                
-                # Actually, since we are inside the loop, we can't easily intercept the tool call return value 
-                # unless we use a callback or parse the full log.
-                # SIMPLIFICATION: We will parse the 'output' string for "FINAL_ANSWER:..." 
-                # because our submit_answer tool returns that string, and the agent usually repeats it or it becomes the final observation.
-                
+                # Extract answer from output
                 answer = None
                 if "FINAL_ANSWER:" in output:
                     answer = output.split("FINAL_ANSWER:")[1].strip()
                 else:
-                    # Fallback: try to find it in the text
-                    # Or maybe the agent didn't call the tool?
-                    logger.warning("Agent did not return FINAL_ANSWER. Output: " + output)
-                    # Try to extract anything that looks like an answer
+                    # Fallback
+                    console.print(f"[warning]Agent did not return FINAL_ANSWER tag. Using raw output.[/warning]")
                     answer = output.strip()
 
-                logger.info(f"Agent determined answer: {answer}")
+                console.print(f"[bold cyan]Agent determined answer:[/bold cyan] {answer}")
                 
                 # Submit the answer
-                # We need to find the submission URL from the page first (Agent could have done this, but let's do it reliably here or ask agent to return it?)
-                # Reliable way: Re-use the logic to find submit URL from the page, or ask agent to find it.
-                # Let's stick to the robust regex logic for finding submit URL, as it's purely mechanical.
-                
-                content = page.content()
-                text_content = page.inner_text("body")
-                submit_url = self._find_submit_url(page, url, text_content, content)
+                # Use initial_submit_url if available, otherwise try to find it again (though we might be on a different page now)
+                submit_url = initial_submit_url
+                if not submit_url:
+                    # Try finding it on current page (maybe we navigated to the submission page?)
+                    content = page.content()
+                    text_content = page.inner_text("body")
+                    submit_url = self._find_submit_url(page, url, text_content, content)
                 
                 if not submit_url:
-                    logger.error("Could not find submit URL.")
+                    console.print("[error]Could not find submit URL.[/error]")
                     return None
                 
                 return self._submit_answer(submit_url, email, answer, url)
 
             except Exception as e:
-                logger.error(f"Error in Agent session: {e}")
+                console.print(f"[error]Error in Agent session: {e}[/error]")
                 return None
             finally:
                 browser.close()
