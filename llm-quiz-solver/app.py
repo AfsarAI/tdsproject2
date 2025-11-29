@@ -102,6 +102,51 @@ def quiz_webhook():
     # Respond immediately as required
     return jsonify({"status": "accepted", "message": "Task received and processing started."}), 200
 
+# Log Buffer for UI
+LOG_BUFFER = []
+LOG_LOCK = threading.Lock()
+
+class ListHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            with LOG_LOCK:
+                LOG_BUFFER.append(msg)
+                # Keep buffer size manageable
+                if len(LOG_BUFFER) > 1000:
+                    LOG_BUFFER.pop(0)
+        except Exception:
+            self.handleError(record)
+
+# Add handler to root logger or specific logger
+list_handler = ListHandler()
+list_handler.setFormatter(logging.Formatter('%(message)s'))
+logging.getLogger().addHandler(list_handler)
+# Also add to quiz_solver logger if it exists separately
+logging.getLogger("quiz_solver").addHandler(list_handler)
+
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/solver')
+def solver_ui():
+    return render_template('solver.html')
+
+@app.route('/api/logs')
+def get_logs():
+    since = int(request.args.get('since', 0))
+    with LOG_LOCK:
+        # If client is asking for index greater than buffer length (e.g. server restart), reset
+        if since > len(LOG_BUFFER):
+            since = 0
+        
+        new_logs = LOG_BUFFER[since:]
+        next_index = len(LOG_BUFFER)
+    
+    return jsonify({"logs": new_logs, "next_index": next_index})
+
 @app.route('/prompt-tester')
 def prompt_tester_ui():
     return render_template('prompt_tester.html')

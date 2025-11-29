@@ -103,7 +103,17 @@ def download_file(url: str) -> str:
                 return f"Error reading PDF: {e}"
         
         elif "csv" in content_type or url.lower().endswith(".csv"):
-             return f"CSV Content:\n{response.text}"
+             # Save to file to avoid flooding context and logs
+             filename = "downloaded_data.csv"
+             try:
+                 with open(filename, "w", encoding="utf-8") as f:
+                     f.write(response.text)
+                 
+                 lines = response.text.splitlines()
+                 head = "\n".join(lines[:5])
+                 return f"CSV content saved to '{filename}'. You MUST write Python code to read this file.\nFirst 5 lines:\n{head}\n...({len(lines)} lines total)"
+             except Exception as e:
+                 return f"Error saving CSV: {e}"
              
         elif "text" in content_type or "json" in content_type:
             return response.text

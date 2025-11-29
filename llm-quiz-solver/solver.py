@@ -80,6 +80,32 @@ class QuizSolver:
                 console.print(f"[error]Error processing quiz at {current_url}: {e}[/error]")
                 break
 
+    def _get_llm(self, provider="gemini"):
+        if provider == "gemini":
+            api_key = os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                return None
+            return ChatGoogleGenerativeAI(
+                model="gemini-2.0-flash",
+                google_api_key=api_key,
+                temperature=0,
+                convert_system_message_to_human=True
+            )
+        elif provider == "aipipe":
+            api_key = os.environ.get("AIPIPE_API_KEY")
+            if not api_key:
+                return None
+            # AIPIPE uses OpenAI-compatible endpoint
+            from langchain_openai import ChatOpenAI
+            return ChatOpenAI(
+                model="google/gemini-2.0-flash-lite-001", # Default for AIPIPE
+                api_key=api_key,
+                base_url="https://aipipe.org/openrouter/v1",
+                temperature=0,
+                default_headers={"HTTP-Referer": "http://localhost:5000", "X-Title": "LLM Quiz Solver"}
+            )
+        return None
+
     def _process_single_quiz_agent(self, url, email):
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -106,9 +132,9 @@ You can also run Python code to analyze data.
 Your specific instructions:
 1. **Read the page content** to understand the question.
 2. **Analyze the task**:
-   - If it involves a file (PDF, CSV), download and process it.
+   - If it involves a file (PDF, CSV), download it. **IMPORTANT**: The `download_file` tool will save the file to disk and return the filename. You MUST then use `run_python_code` to read that file (e.g., `pandas.read_csv('downloaded_data.csv')`) and calculate the answer. Do NOT try to read the file content directly from the tool output.
    - If it involves scraping, navigate to the target pages.
-   - If it involves visualization, generate the chart code (but you might not need to render it if the answer is just a number/string).
+   - If it involves visualization, generate the chart code.
 3. **Calculate the answer**.
 4. **Call the `submit_answer` tool** with the final answer.
 
@@ -117,6 +143,7 @@ Your specific instructions:
 - **Answer Format**: The answer can be a string, number, or JSON.
 - **Submission**: Do NOT submit via HTTP POST yourself. ALWAYS use the `submit_answer` tool.
 - **Output Noise**: Do NOT print large amounts of data (like whole CSVs or long lists) to stdout. Use `head()` or summary statistics if you need to inspect data.
+- **Code Execution**: When using Python, always print the result so you can see it in the logs.
 
 Context:
 - User Email: {email}
@@ -128,13 +155,39 @@ Context:
                     ("placeholder", "{agent_scratchpad}"),
                 ])
                 
+                # Try Gemini first, then AIPIPE
+                llm = self._get_llm("gemini")
+                if not llm:
+                    console.print("[warning]Gemini API Key missing, trying AIPIPE...[/warning]")
+                    llm = self._get_llm("aipipe")
+                
+                if not llm:
+                    console.print("[error]No valid LLM provider found (Gemini or AIPIPE).[/error]")
+                    return None
+
                 # Create Agent
-                agent = create_tool_calling_agent(self.llm, self.tools, prompt)
+                agent = create_tool_calling_agent(llm, self.tools, prompt)
                 agent_executor = AgentExecutor(agent=agent, tools=self.tools, verbose=True, handle_parsing_errors=True)
                 
                 # Run Agent
                 console.print("[info]Agent is thinking...[/info]")
-                response = agent_executor.invoke({"input": "Solve the quiz on the current page."})
+                try:
+                    response = agent_executor.invoke({"input": "Solve the quiz on the current page."})
+                except Exception as e:
+                    console.print(f"[error]Agent failed with primary LLM: {e}. Trying fallback...[/error]")
+                    # Fallback logic
+                    if isinstance(llm, ChatGoogleGenerativeAI):
+                        fallback_llm = self._get_llm("aipipe")
+                        if fallback_llm:
+                            console.print("[info]Switching to AIPIPE...[/info]")
+                            agent = create_tool_calling_agent(fallback_llm, self.tools, prompt)
+                            agent_executor = AgentExecutor(agent=agent, tools=self.tools, verbose=True, handle_parsing_errors=True)
+                            response = agent_executor.invoke({"input": "Solve the quiz on the current page."})
+                        else:
+                            raise e
+                    else:
+                        raise e
+
                 output = response["output"]
                 
                 # Extract answer from output
