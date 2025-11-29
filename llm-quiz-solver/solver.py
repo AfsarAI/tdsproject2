@@ -151,6 +151,11 @@ GENERAL:
 - Use `get_page_content` to read instructions.
 - Use `run_python_code` for ALL calculations. Do not do math in your head.
 - Always return the final answer using the `submit_answer` tool.
+
+Context:
+- User Email: {email}
+- Quiz Secret: {self.secret}
+- Current Quiz URL: {url}
 """),
                     ("placeholder", "{chat_history}"),
                     ("human", "{input}"),
