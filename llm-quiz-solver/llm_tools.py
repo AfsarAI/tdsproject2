@@ -165,16 +165,19 @@ def run_python_code(code: str) -> str:
 
 class SubmitAnswerSchema(BaseModel):
     answer: Any = Field(description="The final answer to the quiz question.")
+    submit_url: Optional[str] = Field(description="The URL to submit the answer to, if explicitly stated on the page.", default=None)
 
 @tool(args_schema=SubmitAnswerSchema, return_direct=True)
-def submit_answer(answer: Any) -> str:
+def submit_answer(answer: Any, submit_url: Optional[str] = None) -> str:
     """
     Submits the final answer to the quiz. 
     This tool should be called when you have calculated the answer.
+    If the page specifies a submit URL (e.g. "Post your answer to ..."), provide it here.
     """
     # This tool is special; it signals the agent loop to stop and submit.
-    # In our implementation, we might just return the answer string and let the loop handle submission,
-    # or we can store it in context.
+    # We return the answer and optional submit_url for the solver to handle.
+    if submit_url:
+        return f"FINAL_ANSWER:{answer}|SUBMIT_URL:{submit_url}"
     return f"FINAL_ANSWER:{answer}"
 
 ALL_TOOLS = [get_page_content, navigate_to_url, download_file, run_python_code, submit_answer]

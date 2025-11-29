@@ -151,6 +151,7 @@ GENERAL:
 - Use `get_page_content` to read instructions.
 - Use `run_python_code` for ALL calculations. Do not do math in your head.
 - Always return the final answer using the `submit_answer` tool.
+- **IMPORTANT**: If the page explicitly says "Post your answer to [URL]", pass that URL to the `submit_answer` tool as the `submit_url` argument.
 
 Context:
 - User Email: {email}
@@ -241,18 +242,28 @@ Context:
 
                     output = response["output"]
                     
-                    # Extract answer from output
+                    # Extract answer and submit_url from output
                     answer = None
+                    agent_submit_url = None
+                    
                     if "FINAL_ANSWER:" in output:
-                        answer = output.split("FINAL_ANSWER:")[1].strip()
+                        final_part = output.split("FINAL_ANSWER:")[1].strip()
+                        if "|SUBMIT_URL:" in final_part:
+                            parts = final_part.split("|SUBMIT_URL:")
+                            answer = parts[0].strip()
+                            agent_submit_url = parts[1].strip()
+                        else:
+                            answer = final_part
                     else:
                         console.print(f"[warning]Agent did not return FINAL_ANSWER tag. Using raw output.[/warning]")
                         answer = output.strip()
 
                     console.print(f"[bold cyan]Agent determined answer:[/bold cyan] {answer}")
+                    if agent_submit_url:
+                        console.print(f"[bold cyan]Agent determined submit URL:[/bold cyan] {agent_submit_url}")
                     
                     # Submit the answer
-                    submit_url = initial_submit_url
+                    submit_url = agent_submit_url or initial_submit_url
                     if not submit_url:
                         content = page.content()
                         text_content = page.inner_text("body")
@@ -284,14 +295,16 @@ Context:
                 browser.close()
 
     def _find_submit_url(self, page, base_url, text_content, html_content):
-        # Logic to find submit URL (copied/adapted from original)
-        submit_match = re.search(r'https?://[^\s"<]+/submit', text_content)
+        # Logic to find submit URL
+        # 1. Try strict regex for .../submit
+        submit_match = re.search(r'https?://[^\s"<>]+?/submit\b', text_content)
         if not submit_match:
-            submit_match = re.search(r'https?://[^\s"<]+/submit', html_content)
+            submit_match = re.search(r'https?://[^\s"<>]+?/submit\b', html_content)
         
         if submit_match:
             return submit_match.group(0)
-            
+
+        # 2. Look for links with "submit" in href
         links = page.query_selector_all("a")
         for link in links:
             href = link.get_attribute("href")
@@ -300,6 +313,14 @@ Context:
                     from urllib.parse import urljoin
                     return urljoin(base_url, href)
                 return href
+        
+        # 3. Fallback: Look for ANY url in text that looks like a submit endpoint
+        # e.g. https://tds-llm-analysis.s-anand.net/project2/submit
+        fallback_match = re.search(r'https?://[^\s"<>]+?s-anand\.net/[^\s"<>]+', text_content)
+        if fallback_match:
+             # This is risky, but might be better than nothing if we are desperate
+             pass
+
         return None
 
     def _submit_answer(self, submit_url, email, answer, original_url):
