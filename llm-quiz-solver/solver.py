@@ -154,7 +154,10 @@ GENERAL:
 - **IMPORTANT**: If the page explicitly says "Post your answer to [URL]", pass that URL to the `submit_answer` tool as the `submit_url` argument.
 - **IMPORTANT**: If the page says "with url = [URL]" or "using url = [URL]", pass that URL to the `submit_answer` tool as the `task_url` argument.
     - `submit_url`: The HTTP endpoint to send the POST request TO. **Defaults to the initial submit URL. Only change this if the page explicitly says "Post to [URL]".**
+- **IMPORTANT**: If the page says "with url = [URL]" or "using url = [URL]", pass that URL to the `submit_answer` tool as the `task_url` argument.
+    - `submit_url`: The HTTP endpoint to send the POST request TO. **Defaults to the initial submit URL. Only change this if the page explicitly says "Post to [URL]".**
     - `task_url`: The value to put inside the JSON payload's "url" field. **Do NOT use this as the submit_url unless the page explicitly says "Post to [URL]".**
+- **IMPORTANT**: If the page says "Start by POSTing..." or implies starting the quiz, and no specific question is asked, the answer is usually just an empty string "" or "start". Do NOT submit a long explanation.
 
 Context:
 - User Email: {email}
@@ -290,12 +293,17 @@ Context:
                     if not submit_url:
                         console.print("[error]Could not find submit URL.[/error]")
                         return None
-                    
+                
                     # Use agent_task_url if provided, otherwise use original url
                     payload_url = agent_task_url if agent_task_url else url
                     submission_result = self._submit_answer(submit_url, email, answer, payload_url)
                     
-                    if submission_result and submission_result.get("correct"):
+                    console.print(f"[bold yellow]DEBUG: Submission Result: {submission_result}[/bold yellow]")
+
+                    if not submission_result:
+                        console.print("[error]Submission failed (no result).[/error]")
+                        return None
+                    elif submission_result.get("correct"):
                         return submission_result
                     else:
                         reason = submission_result.get("reason", "Unknown error") if submission_result else "Submission failed"

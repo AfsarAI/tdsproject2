@@ -22,19 +22,18 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Virtual Environment
-.env
+# Virtual Env
 .venv
-env/
 venv/
 ENV/
-env.bak/
-venv.bak/
+env/
 
-# IDEs
-.vscode/
-.idea/
+# Environment Variables
+.env
 
-# OS
-.DS_Store
-Thumbs.db
+# Logs
+*.log
+*_logs.txt
+
+# Reference Repo
+reference_repo/

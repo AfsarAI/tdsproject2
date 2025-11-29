@@ -5,8 +5,12 @@ PyPDF2
 pandas
 python-dotenv
 gunicorn
-langchain
-langchain-google-genai
+langchain==0.2.16
+langchain-community==0.2.16
+langchain-core==0.2.38
+langchain-google-genai==1.0.10
+langchain-openai==0.1.23
+langgraph==0.2.16
 beautifulsoup4
 markdownify
 pillow
