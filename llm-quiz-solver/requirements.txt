@@ -3,3 +3,4 @@ requests
 playwright
 PyPDF2
 pandas
+python-dotenv
