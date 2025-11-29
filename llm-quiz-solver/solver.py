@@ -92,13 +92,13 @@ class QuizSolver:
                 convert_system_message_to_human=True
             )
         elif provider == "aipipe":
-            api_key = os.environ.get("AIPIPE_API_KEY")
-            if not api_key:
-                return None
+            # User provided specific key
+            api_key = os.environ.get("AIPIPE_API_KEY") or "eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6IjIzZjIwMDIwMjNAZHMuc3R1ZHkuaWl0bS5hYy5pbiJ9.FsZQpaXV3lzcIPYelSZ5ZH83MFBb-DUq86sOidLPJrI"
+            
             # AIPIPE uses OpenAI-compatible endpoint
             from langchain_openai import ChatOpenAI
             return ChatOpenAI(
-                model="google/gemini-2.0-flash-lite-001", # Default for AIPIPE
+                model="gpt-4o-mini", # User requested GPT model
                 api_key=api_key,
                 base_url="https://aipipe.org/openrouter/v1",
                 temperature=0,

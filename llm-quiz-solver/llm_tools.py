@@ -9,12 +9,14 @@ from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-class ToolContext:
-    """Holds the context for the tools (browser page, etc.)"""
-    def __init__(self, page=None):
-        self.page = page
+import threading
 
-# Global context to be set by the solver
+class ToolContext(threading.local):
+    """Holds the context for the tools (browser page, etc.) thread-locally."""
+    def __init__(self):
+        self.page = None
+
+# Thread-local context
 context = ToolContext()
 
 def set_page(page):
