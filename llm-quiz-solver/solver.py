@@ -153,8 +153,8 @@ GENERAL:
 - Always return the final answer using the `submit_answer` tool.
 - **IMPORTANT**: If the page explicitly says "Post your answer to [URL]", pass that URL to the `submit_answer` tool as the `submit_url` argument.
 - **IMPORTANT**: If the page says "with url = [URL]" or "using url = [URL]", pass that URL to the `submit_answer` tool as the `task_url` argument.
-    - `submit_url`: The HTTP endpoint to send the POST request TO.
-    - `task_url`: The value to put inside the JSON payload's "url" field.
+    - `submit_url`: The HTTP endpoint to send the POST request TO. **Defaults to the initial submit URL. Only change this if the page explicitly says "Post to [URL]".**
+    - `task_url`: The value to put inside the JSON payload's "url" field. **Do NOT use this as the submit_url unless the page explicitly says "Post to [URL]".**
 
 Context:
 - User Email: {email}
