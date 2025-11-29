@@ -124,7 +124,7 @@ class QuizSolver:
                 
                 # Define Prompt
                 prompt = ChatPromptTemplate.from_messages([
-                    ("system", """You are an intelligent agent built to solve a specific quiz.
+                    ("system", f"""You are an intelligent agent built to solve a specific quiz.
 You have access to a web browser and python code execution tools.
 
 YOUR GOAL:
