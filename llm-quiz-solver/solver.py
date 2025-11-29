@@ -169,90 +169,106 @@ Context:
                 agent = create_tool_calling_agent(llm, self.tools, prompt)
                 agent_executor = AgentExecutor(agent=agent, tools=self.tools, verbose=True, handle_parsing_errors=True)
                 
-                # Run Agent
+                # Run Agent with Retry Loop for Wrong Answers
                 console.print("[info]Agent is thinking...[/info]")
-                max_retries = 3
-                retry_count = 0
+                max_wrong_answer_retries = 3
+                wrong_answer_count = 0
+                current_input = "Solve the quiz on the current page."
                 
-                while retry_count < max_retries:
-                    try:
-                        response = agent_executor.invoke({"input": "Solve the quiz on the current page."})
-                        break # Success
-                    except Exception as e:
-                        error_str = str(e)
-                        if "429" in error_str or "ResourceExhausted" in error_str or "quota" in error_str.lower():
-                            retry_count += 1
-                            wait_time = 15 * retry_count # Progressive backoff: 15s, 30s, 45s
-                            console.print(f"[warning]Rate limit hit (429). Waiting {wait_time}s before retry {retry_count}/{max_retries}...[/warning]")
-                            import time
-                            time.sleep(wait_time)
-                            if retry_count == max_retries:
-                                console.print("[error]Max retries reached for Gemini. Trying fallback...[/error]")
-                                # Fallback logic (only if retries exhausted)
+                while wrong_answer_count < max_wrong_answer_retries:
+                    # Execute Agent Chain
+                    max_retries = 3
+                    retry_count = 0
+                    response = None
+                    
+                    while retry_count < max_retries:
+                        try:
+                            response = agent_executor.invoke({"input": current_input})
+                            break # Success
+                        except Exception as e:
+                            error_str = str(e)
+                            if "429" in error_str or "ResourceExhausted" in error_str or "quota" in error_str.lower():
+                                retry_count += 1
+                                wait_time = 15 * retry_count
+                                console.print(f"[warning]Rate limit hit (429). Waiting {wait_time}s before retry {retry_count}/{max_retries}...[/warning]")
+                                import time
+                                time.sleep(wait_time)
+                                if retry_count == max_retries:
+                                    # Fallback logic (simplified for brevity, keeping existing logic structure)
+                                    if isinstance(llm, ChatGoogleGenerativeAI):
+                                        fallback_llm = self._get_llm("aipipe")
+                                        if fallback_llm:
+                                            console.print("[info]Switching to AIPIPE...[/info]")
+                                            agent = create_tool_calling_agent(fallback_llm, self.tools, prompt)
+                                            agent_executor = AgentExecutor(agent=agent, tools=self.tools, verbose=True, handle_parsing_errors=True)
+                                            try:
+                                                response = agent_executor.invoke({"input": current_input})
+                                                break
+                                            except Exception as fallback_e:
+                                                raise fallback_e
+                                        else:
+                                            raise e
+                                    else:
+                                        raise e
+                            else:
+                                # Immediate fallback logic
                                 if isinstance(llm, ChatGoogleGenerativeAI):
                                     fallback_llm = self._get_llm("aipipe")
                                     if fallback_llm:
                                         console.print("[info]Switching to AIPIPE...[/info]")
-                                        # Re-create agent with fallback LLM
                                         agent = create_tool_calling_agent(fallback_llm, self.tools, prompt)
                                         agent_executor = AgentExecutor(agent=agent, tools=self.tools, verbose=True, handle_parsing_errors=True)
                                         try:
-                                            response = agent_executor.invoke({"input": "Solve the quiz on the current page."})
+                                            response = agent_executor.invoke({"input": current_input})
                                             break
                                         except Exception as fallback_e:
-                                            console.print(f"[error]Fallback failed: {fallback_e}[/error]")
                                             raise fallback_e
                                     else:
                                         raise e
                                 else:
                                     raise e
+
+                    if not response:
+                        console.print("[error]Agent failed to produce a response.[/error]")
+                        return None
+
+                    output = response["output"]
+                    
+                    # Extract answer from output
+                    answer = None
+                    if "FINAL_ANSWER:" in output:
+                        answer = output.split("FINAL_ANSWER:")[1].strip()
+                    else:
+                        console.print(f"[warning]Agent did not return FINAL_ANSWER tag. Using raw output.[/warning]")
+                        answer = output.strip()
+
+                    console.print(f"[bold cyan]Agent determined answer:[/bold cyan] {answer}")
+                    
+                    # Submit the answer
+                    submit_url = initial_submit_url
+                    if not submit_url:
+                        content = page.content()
+                        text_content = page.inner_text("body")
+                        submit_url = self._find_submit_url(page, url, text_content, content)
+                    
+                    if not submit_url:
+                        console.print("[error]Could not find submit URL.[/error]")
+                        return None
+                    
+                    submission_result = self._submit_answer(submit_url, email, answer, url)
+                    
+                    if submission_result and submission_result.get("correct"):
+                        return submission_result
+                    else:
+                        reason = submission_result.get("reason", "Unknown error") if submission_result else "Submission failed"
+                        console.print(f"[error]Wrong answer submitted. Reason: {reason}[/error]")
+                        wrong_answer_count += 1
+                        if wrong_answer_count < max_wrong_answer_retries:
+                            console.print(f"[info]Retrying with feedback ({wrong_answer_count}/{max_wrong_answer_retries})...[/info]")
+                            current_input = f"Your previous answer '{answer}' was WRONG. The server responded: '{reason}'. Please analyze the task again, fix your mistake, and submit the correct answer."
                         else:
-                            # Not a rate limit error, try fallback immediately
-                            console.print(f"[error]Agent failed with primary LLM: {e}. Trying fallback...[/error]")
-                            if isinstance(llm, ChatGoogleGenerativeAI):
-                                fallback_llm = self._get_llm("aipipe")
-                                if fallback_llm:
-                                    console.print("[info]Switching to AIPIPE...[/info]")
-                                    agent = create_tool_calling_agent(fallback_llm, self.tools, prompt)
-                                    agent_executor = AgentExecutor(agent=agent, tools=self.tools, verbose=True, handle_parsing_errors=True)
-                                    try:
-                                        response = agent_executor.invoke({"input": "Solve the quiz on the current page."})
-                                        break
-                                    except Exception as fallback_e:
-                                         console.print(f"[error]Fallback failed: {fallback_e}[/error]")
-                                         raise fallback_e
-                                else:
-                                    raise e
-                            else:
-                                raise e
-
-                output = response["output"]
-                
-                # Extract answer from output
-                answer = None
-                if "FINAL_ANSWER:" in output:
-                    answer = output.split("FINAL_ANSWER:")[1].strip()
-                else:
-                    # Fallback
-                    console.print(f"[warning]Agent did not return FINAL_ANSWER tag. Using raw output.[/warning]")
-                    answer = output.strip()
-
-                console.print(f"[bold cyan]Agent determined answer:[/bold cyan] {answer}")
-                
-                # Submit the answer
-                # Use initial_submit_url if available, otherwise try to find it again (though we might be on a different page now)
-                submit_url = initial_submit_url
-                if not submit_url:
-                    # Try finding it on current page (maybe we navigated to the submission page?)
-                    content = page.content()
-                    text_content = page.inner_text("body")
-                    submit_url = self._find_submit_url(page, url, text_content, content)
-                
-                if not submit_url:
-                    console.print("[error]Could not find submit URL.[/error]")
-                    return None
-                
-                return self._submit_answer(submit_url, email, answer, url)
+                            console.print("[error]Max wrong answer retries reached.[/error]")
+                            return submission_result # Return the last (failed) result
 
             except Exception as e:
                 console.print(f"[error]Error in Agent session: {e}[/error]")
