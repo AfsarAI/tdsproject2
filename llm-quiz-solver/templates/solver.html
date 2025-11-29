@@ -84,6 +84,15 @@
                             class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:outline-none transition-all">
                     </div>
 
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Select Solver</label>
+                        <select id="solverSelect" name="solverSelect"
+                            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:outline-none transition-all">
+                            <option value="5000">My Project (Port 5000)</option>
+                            <option value="7860">Reference Project (Port 7860)</option>
+                        </select>
+                    </div>
+
                     <div class="pt-4 space-y-3">
                         <button type="submit" id="startBtn"
                             class="w-full bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-500 hover:to-teal-500 text-white font-bold py-3 px-4 rounded-xl transition-all transform hover:scale-[1.02] shadow-lg shadow-green-900/20 flex items-center justify-center gap-2">
@@ -207,21 +216,27 @@
             e.preventDefault();
             const formData = new FormData(e.target);
             const payload = Object.fromEntries(formData.entries());
+            const solverPort = document.getElementById('solverSelect').value;
 
-            appendLog("Starting solver task...", 'info');
-            startPolling();
+            appendLog(`Starting solver task on Port ${solverPort}...`, 'info');
+            startPolling(); // Polling only works for Port 5000 (our logs), but we'll leave it for now.
+
+            let url = '/quiz-webhook';
+            if (solverPort === '7860') {
+                url = 'http://localhost:7860/solve';
+            }
 
             try {
-                const res = await fetch('/quiz-webhook', {
+                const res = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
                 const result = await res.json();
                 if (res.ok) {
-                    appendLog(`Task accepted: ${result.message}`, 'success');
+                    appendLog(`Task accepted: ${result.message || result.status}`, 'success');
                 } else {
-                    appendLog(`Error: ${result.error}`, 'error');
+                    appendLog(`Error: ${result.error || result.detail}`, 'error');
                 }
             } catch (err) {
                 appendLog(`Network Error: ${err.message}`, 'error');

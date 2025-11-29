@@ -152,6 +152,9 @@ GENERAL:
 - Use `run_python_code` for ALL calculations. Do not do math in your head.
 - Always return the final answer using the `submit_answer` tool.
 - **IMPORTANT**: If the page explicitly says "Post your answer to [URL]", pass that URL to the `submit_answer` tool as the `submit_url` argument.
+- **IMPORTANT**: If the page says "with url = [URL]" or "using url = [URL]", pass that URL to the `submit_answer` tool as the `task_url` argument.
+    - `submit_url`: The HTTP endpoint to send the POST request TO.
+    - `task_url`: The value to put inside the JSON payload's "url" field.
 
 Context:
 - User Email: {email}
@@ -242,16 +245,29 @@ Context:
 
                     output = response["output"]
                     
-                    # Extract answer and submit_url from output
+                    # Extract answer, submit_url, and task_url from output
                     answer = None
                     agent_submit_url = None
+                    agent_task_url = None
                     
                     if "FINAL_ANSWER:" in output:
                         final_part = output.split("FINAL_ANSWER:")[1].strip()
+                        
+                        # Parse optional parts
                         if "|SUBMIT_URL:" in final_part:
                             parts = final_part.split("|SUBMIT_URL:")
                             answer = parts[0].strip()
-                            agent_submit_url = parts[1].strip()
+                            remaining = parts[1].strip()
+                            if "|TASK_URL:" in remaining:
+                                subparts = remaining.split("|TASK_URL:")
+                                agent_submit_url = subparts[0].strip()
+                                agent_task_url = subparts[1].strip()
+                            else:
+                                agent_submit_url = remaining
+                        elif "|TASK_URL:" in final_part:
+                            parts = final_part.split("|TASK_URL:")
+                            answer = parts[0].strip()
+                            agent_task_url = parts[1].strip()
                         else:
                             answer = final_part
                     else:
@@ -261,6 +277,8 @@ Context:
                     console.print(f"[bold cyan]Agent determined answer:[/bold cyan] {answer}")
                     if agent_submit_url:
                         console.print(f"[bold cyan]Agent determined submit URL:[/bold cyan] {agent_submit_url}")
+                    if agent_task_url:
+                        console.print(f"[bold cyan]Agent determined task URL (for payload):[/bold cyan] {agent_task_url}")
                     
                     # Submit the answer
                     submit_url = agent_submit_url or initial_submit_url
@@ -273,7 +291,9 @@ Context:
                         console.print("[error]Could not find submit URL.[/error]")
                         return None
                     
-                    submission_result = self._submit_answer(submit_url, email, answer, url)
+                    # Use agent_task_url if provided, otherwise use original url
+                    payload_url = agent_task_url if agent_task_url else url
+                    submission_result = self._submit_answer(submit_url, email, answer, payload_url)
                     
                     if submission_result and submission_result.get("correct"):
                         return submission_result

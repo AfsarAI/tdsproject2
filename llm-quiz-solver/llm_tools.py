@@ -165,19 +165,24 @@ def run_python_code(code: str) -> str:
 
 class SubmitAnswerSchema(BaseModel):
     answer: Any = Field(description="The final answer to the quiz question.")
-    submit_url: Optional[str] = Field(description="The URL to submit the answer to, if explicitly stated on the page.", default=None)
+    submit_url: Optional[str] = Field(description="The URL to submit the answer to (HTTP endpoint). Only use if explicitly different from default.", default=None)
+    task_url: Optional[str] = Field(description="The value for the 'url' field in the JSON payload. Use this if the page says 'use url = ...'.", default=None)
 
 @tool(args_schema=SubmitAnswerSchema, return_direct=True)
-def submit_answer(answer: Any, submit_url: Optional[str] = None) -> str:
+def submit_answer(answer: Any, submit_url: Optional[str] = None, task_url: Optional[str] = None) -> str:
     """
     Submits the final answer to the quiz. 
     This tool should be called when you have calculated the answer.
-    If the page specifies a submit URL (e.g. "Post your answer to ..."), provide it here.
+    - answer: The result.
+    - submit_url: The HTTP POST endpoint (e.g. https://.../submit).
+    - task_url: The 'url' field for the JSON payload (e.g. if page says 'use url = https://...').
     """
     # This tool is special; it signals the agent loop to stop and submit.
-    # We return the answer and optional submit_url for the solver to handle.
+    result = f"FINAL_ANSWER:{answer}"
     if submit_url:
-        return f"FINAL_ANSWER:{answer}|SUBMIT_URL:{submit_url}"
-    return f"FINAL_ANSWER:{answer}"
+        result += f"|SUBMIT_URL:{submit_url}"
+    if task_url:
+        result += f"|TASK_URL:{task_url}"
+    return result
 
 ALL_TOOLS = [get_page_content, navigate_to_url, download_file, run_python_code, submit_answer]
