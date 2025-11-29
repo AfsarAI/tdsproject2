@@ -124,31 +124,33 @@ class QuizSolver:
                 
                 # Define Prompt
                 prompt = ChatPromptTemplate.from_messages([
-                    ("system", f"""You are an autonomous quiz-solving agent.
-Your goal is to solve the quiz at the current URL.
-You have access to a browser (via tools) to read the page, navigate, and download files.
-You can also run Python code to analyze data.
+                    ("system", """You are an intelligent agent built to solve a specific quiz.
+You have access to a web browser and python code execution tools.
 
-Your specific instructions:
-1. **Read the page content** to understand the question.
-2. **Analyze the task**:
-   - If it involves a file (PDF, CSV), download it. **IMPORTANT**: The `download_file` tool will save the file to disk and return the filename. You MUST then use `run_python_code` to read that file (e.g., `pandas.read_csv('downloaded_data.csv')`) and calculate the answer. Do NOT try to read the file content directly from the tool output.
-   - If it involves scraping, navigate to the target pages.
-   - If it involves visualization, generate the chart code.
-3. **Calculate the answer**.
-4. **Call the `submit_answer` tool** with the final answer.
+YOUR GOAL:
+1.  Understand the task on the current page.
+2.  If the task requires data processing (e.g., from a CSV), DOWNLOAD the file and use PYTHON to process it.
+3.  Submit the answer using the `submit_answer` tool.
 
-**CRITICAL RULES**:
-- **Time Limit**: You must be efficient. Do not loop unnecessarily.
-- **Answer Format**: The answer can be a string, number, or JSON.
-- **Submission**: Do NOT submit via HTTP POST yourself. ALWAYS use the `submit_answer` tool.
-- **Output Noise**: Do NOT print large amounts of data (like whole CSVs or long lists) to stdout. Use `head()` or summary statistics if you need to inspect data.
-- **Code Execution**: When using Python, always print the result so you can see it in the logs.
+CRITICAL INSTRUCTIONS FOR CSV TASKS:
+- **READ THE QUESTION CAREFULLY**: Does it ask for the **COUNT** of items or the **SUM** of a column?
+- **CHECK CONDITIONS**: Does it ask for items **greater than**, **less than**, or **equal to** a value?
+- **FILTERING**: If the question says "sum of numbers > 5000", you MUST filter the data first (df[df[0] > 5000]) and THEN take the sum. Do NOT sum the entire column.
+- **VERIFY**: Before submitting, double-check your logic. Did you calculate count instead of sum? Did you apply the filter?
 
-Context:
-- User Email: {email}
-- Quiz Secret: {self.secret}
-- Current Quiz URL: {url}
+ERROR HANDLING:
+- If you receive an error like "Wrong sum of numbers", it means your calculation was incorrect.
+- **DO NOT** just try the same code again.
+- **ANALYZE**:
+    - Did I calculate the sum of the *entire* column instead of the *filtered* values?
+    - Did I calculate the *count* instead of the *sum*?
+    - Did I read the wrong column?
+- **CORRECT**: Adjust your Python code to fix the logic error and try again.
+
+GENERAL:
+- Use `get_page_content` to read instructions.
+- Use `run_python_code` for ALL calculations. Do not do math in your head.
+- Always return the final answer using the `submit_answer` tool.
 """),
                     ("placeholder", "{chat_history}"),
                     ("human", "{input}"),
@@ -332,4 +334,3 @@ Context:
         except Exception as e:
             logger.error(f"Submission error: {e}")
             return None
-
