@@ -37,7 +37,7 @@ PROVIDERS = {
     }
 }
 
-MY_SECRET = os.environ.get("QUIZ_SECRET", "default-secret")
+MY_SECRET = os.environ.get("QUIZ_SECRET", "224149")
 
 @app.route('/api/aipipe/models', methods=['POST'])
 def get_aipipe_models():
