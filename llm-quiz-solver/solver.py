@@ -171,22 +171,60 @@ Context:
                 
                 # Run Agent
                 console.print("[info]Agent is thinking...[/info]")
-                try:
-                    response = agent_executor.invoke({"input": "Solve the quiz on the current page."})
-                except Exception as e:
-                    console.print(f"[error]Agent failed with primary LLM: {e}. Trying fallback...[/error]")
-                    # Fallback logic
-                    if isinstance(llm, ChatGoogleGenerativeAI):
-                        fallback_llm = self._get_llm("aipipe")
-                        if fallback_llm:
-                            console.print("[info]Switching to AIPIPE...[/info]")
-                            agent = create_tool_calling_agent(fallback_llm, self.tools, prompt)
-                            agent_executor = AgentExecutor(agent=agent, tools=self.tools, verbose=True, handle_parsing_errors=True)
-                            response = agent_executor.invoke({"input": "Solve the quiz on the current page."})
+                max_retries = 3
+                retry_count = 0
+                
+                while retry_count < max_retries:
+                    try:
+                        response = agent_executor.invoke({"input": "Solve the quiz on the current page."})
+                        break # Success
+                    except Exception as e:
+                        error_str = str(e)
+                        if "429" in error_str or "ResourceExhausted" in error_str or "quota" in error_str.lower():
+                            retry_count += 1
+                            wait_time = 15 * retry_count # Progressive backoff: 15s, 30s, 45s
+                            console.print(f"[warning]Rate limit hit (429). Waiting {wait_time}s before retry {retry_count}/{max_retries}...[/warning]")
+                            import time
+                            time.sleep(wait_time)
+                            if retry_count == max_retries:
+                                console.print("[error]Max retries reached for Gemini. Trying fallback...[/error]")
+                                # Fallback logic (only if retries exhausted)
+                                if isinstance(llm, ChatGoogleGenerativeAI):
+                                    fallback_llm = self._get_llm("aipipe")
+                                    if fallback_llm:
+                                        console.print("[info]Switching to AIPIPE...[/info]")
+                                        # Re-create agent with fallback LLM
+                                        agent = create_tool_calling_agent(fallback_llm, self.tools, prompt)
+                                        agent_executor = AgentExecutor(agent=agent, tools=self.tools, verbose=True, handle_parsing_errors=True)
+                                        try:
+                                            response = agent_executor.invoke({"input": "Solve the quiz on the current page."})
+                                            break
+                                        except Exception as fallback_e:
+                                            console.print(f"[error]Fallback failed: {fallback_e}[/error]")
+                                            raise fallback_e
+                                    else:
+                                        raise e
+                                else:
+                                    raise e
                         else:
-                            raise e
-                    else:
-                        raise e
+                            # Not a rate limit error, try fallback immediately
+                            console.print(f"[error]Agent failed with primary LLM: {e}. Trying fallback...[/error]")
+                            if isinstance(llm, ChatGoogleGenerativeAI):
+                                fallback_llm = self._get_llm("aipipe")
+                                if fallback_llm:
+                                    console.print("[info]Switching to AIPIPE...[/info]")
+                                    agent = create_tool_calling_agent(fallback_llm, self.tools, prompt)
+                                    agent_executor = AgentExecutor(agent=agent, tools=self.tools, verbose=True, handle_parsing_errors=True)
+                                    try:
+                                        response = agent_executor.invoke({"input": "Solve the quiz on the current page."})
+                                        break
+                                    except Exception as fallback_e:
+                                         console.print(f"[error]Fallback failed: {fallback_e}[/error]")
+                                         raise fallback_e
+                                else:
+                                    raise e
+                            else:
+                                raise e
 
                 output = response["output"]
                 
