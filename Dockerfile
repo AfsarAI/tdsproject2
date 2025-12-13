@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 # --- System deps required by Playwright browsers AND Tesseract ---
 # Added 'tesseract-ocr' to the install list
