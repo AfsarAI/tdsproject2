@@ -163,15 +163,15 @@ Create a `.env` file in the project root:
 EMAIL=your.email@example.com
 SECRET=your_secret_string
 
-# Google Gemini API Key
-GOOGLE_API_KEY=your_gemini_api_key_here
+# AIPipe API Key (replaces Google Gemini)
+AIPIPE_API_KEY=your_aipipe_api_key_here
 ```
 
-### Getting a Gemini API Key
+### Getting an AIPipe API Key
 
-1. Visit [Google AI Studio](https://aistudio.google.com/app/apikey)
-2. Create a new API key
-3. Copy it to your `.env` file
+1. Visit [AIPipe](https://aipipe.org)
+2. Sign up and create an API key
+3. Copy it to your `.env` file as `AIPIPE_API_KEY`
 
 ## 🚀 Usage
 
@@ -298,7 +298,7 @@ docker build -t llm-analysis-agent .
 docker run -p 7860:7860 \
   -e EMAIL="your.email@example.com" \
   -e SECRET="your_secret_string" \
-  -e GOOGLE_API_KEY="your_api_key" \
+  -e AIPIPE_API_KEY="your_api_key" \
   llm-analysis-agent
 ```
 
@@ -309,7 +309,7 @@ docker run -p 7860:7860 \
 3. Add secrets in Space settings:
    - `EMAIL`
    - `SECRET`
-   - `GOOGLE_API_KEY`
+   - `AIPIPE_API_KEY`
 4. The Space will automatically build and deploy
 
 ## 🧠 How It Works

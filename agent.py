@@ -52,8 +52,10 @@ rate_limiter = InMemoryRateLimiter(
 )
 
 llm = init_chat_model(
-    model_provider="google_genai",
-    model="gemini-2.5-flash",
+    model="gemini-2.0-flash-exp",
+    model_provider="openai",
+    api_key=os.getenv("AIPIPE_API_KEY", "eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6IjIzZjIwMDIwMjNAZHMuc3R1ZHkuaWl0bS5hYy5pbiJ9.FsZQpaXV3lzcIPYelSZ5ZH83MFBb-DUq86sOidLPJrI"),
+    base_url="https://aipipe.org/gemini/v1beta",
     rate_limiter=rate_limiter
 ).bind_tools(TOOLS)
 

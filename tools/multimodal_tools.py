@@ -1,12 +1,15 @@
 import os
 import base64
 from langchain_core.tools import tool
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 
-# Initialize the model for multimodal analysis
-# We use a separate instance or the same one, but we need to ensure it's configured for multimodal
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+# Initialize the model for multimodal analysis using AIPipe
+llm = ChatOpenAI(
+    model="gemini-2.0-flash-exp",
+    api_key=os.getenv("AIPIPE_API_KEY", "eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6IjIzZjIwMDIwMjNAZHMuc3R1ZHkuaWl0bS5hYy5pbiJ9.FsZQpaXV3lzcIPYelSZ5ZH83MFBb-DUq86sOidLPJrI"),
+    base_url="https://aipipe.org/gemini/v1beta"
+)
 
 def encode_file_to_base64(file_path: str) -> str:
     """Helper to encode file to base64."""
